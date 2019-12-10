@@ -8,7 +8,7 @@
 #define v_read_pin A0
 
 #define aref 5.05
-#define jolt_val 30
+#define jolt_val 5000
 #define gps_samp 10
 
 // Et delay under 10 sender ikke
@@ -24,8 +24,8 @@ uint8_t sanity_val = 0;
 long accelX, accelY, accelZ;
 float aX, aY, aZ, LSB;
 
-SoftwareSerial 	GPS 	   (10,9);
-Akeru 			    akeru 	 (4, 5);
+SoftwareSerial  GPS      (10,9);
+Akeru           akeru    (4, 5);
 
 struct transmitData {
     String time;
@@ -45,43 +45,46 @@ struct gpsData{
 } pulled;
 
 // Trækker data ud af GPS-modulets serielle output og placerer det i et struct
-  void gpsPull(struct gpsData *input) {
-    int pos;                    // Variabel til at holde positionen i arrayet nmea[]
-    String tempMsg = GPS.readStringUntil('\n'); // GPS output for $GPRMC linjen placeres i en tempMsg string
-    String nmea[12]; // String array til at holde hvert formateret output
-    int stringplace = 0;        // Variabel til at holde den læste position i GPS-output
+void gpsPull(struct gpsData *input) {
+  int pos = 0;                    // Variabel til at holde positionen i arrayet place[]
+  String tempMsg = GPS.readStringUntil('\n'); // GPS output for $GPRMC linjen placeres i en tempMsg string
+  String place[12]; // String array til at holde hvert formateret output
+  int stringstart = 0;        // Variabel til at holde den læste position i GPS-output
 
-    GPS.listen();
+  GPS.listen();
 
-    Serial.flush(); // De serielle forbindelser flushes for bedre aflæsning
-    GPS.flush();
-    while (GPS.available() > 0) // Imens GPS er tilgængelig
+  Serial.flush(); // De serielle forbindelser flushes for bedre aflæsning
+  GPS.flush();
+  while (GPS.available() > 0) // Imens GPS er tilgængelig
+  {
+    GPS.read();
+  }
+  
+  if (GPS.find("$GPRMC,")) // Hvis Minimum Configuration linjen findes...
+  {
+    for (int i = 0; i < tempMsg.length(); i++)  // For loop tæller op til antallet af karakterer i tempMsg
     {
-        GPS.read();
+      if (tempMsg.substring(i, i + 1) == ",") // Hvis karakteren i $GPRMC beskeden har et komma
+      {
+        place[pos] = tempMsg.substring(stringstart, i); // Nuværende karakter skrives ind i array
+        stringstart = i + 1; // Komma springes over, noteres ikke
+        pos++; // Skifter til næste position i arrayet 
+      }
+      if (i == tempMsg.length() - 1) // Hvis enden af tempMsg er nået
+      {
+        place[pos] = tempMsg.substring(stringstart, i);
+      }
     }
-    if (GPS.find("$GPRMC,")) // Hvis Minimum Configuration linjen findes...
-    {
-        for (int i = 0; i < tempMsg.length(); i++)  // For loop tæller op til antallet af karakterer i tempMsg
-        {
-            if (tempMsg.substring(i, i + 1) == ",") // Hvis det næste karakter i $GPRMC beskeden har et komma
-            {
-                nmea[pos] = tempMsg.substring(stringplace, i); // Nuværende karakter skrives ind i array
-                stringplace = i + 1; // Komma springes over, noteres ikke
-                pos++; // Skifter til næste position i arrayet 
-            }
-            if (i == tempMsg.length() - 1) // Hvis enden af tempMsg er nået
-            {
-                nmea[pos] = tempMsg.substring(stringplace, i);
-            }
-        }
-    }
+  }
 
-    //input -> time = nmea[0]; // time
-    //input -> date = nmea[8]; // date
-    input -> latitude = nmea[2]; // latitude
-    input -> lathem = nmea[3]; // lat hem
-    input -> longitude = nmea[4]; // longitude
-    input -> longhem = nmea[5]; // long hem
+  // Kilde : http://www.davidjwatts.com/youtube/GPS-software-serial.ino
+
+  //input -> time = place[0]; // time
+  //input -> date = place[8]; // date
+  input -> latitude = place[2]; // latitude
+  input -> lathem = place[3]; // lat hem
+  input -> longitude = place[4]; // longitude
+  input -> longhem = place[5]; // long hem
 }
 
 // Formaterer GPS data til afsending. Fra streng til streng
@@ -149,18 +152,16 @@ void gpsFormat(struct gpsData *input,struct transmitData *output, float voltageF
 }
 
 // Udregner spænding på batteriet, ud fra et gennemsnit af målinger 
-float getVoltage(int samples = 10) {
-    float voltage = 0;      // Sum af samlede spændinger
-    uint16_t RA = 1000000;  // Intern modstand i Arduino
-    float RE = (R2 * RA) / (R2 + RA); // erstatning
+float getVoltage(int samples = 100) {
+  float voltage = 0;      // Sum af samlede spændinger
+  uint16_t RA = 1000000;  // Intern modstand i Arduino
+  float RE = (R2 * RA) / (R2 + RA); // erstatning
 
-    for (int i = 0; i < samples; i++) {
-      voltage += analogRead(v_read_pin);
-      //Serial.println(voltage);
- 
-    }
-    //Serial.println(RE);
-    return ((voltage / samples) * ( aref / 1024 ) * ( R1 / RE )) ;
+  for (int i = 0; i < samples; i++) {
+    voltage += analogRead(v_read_pin);
+    delay(10);
+  }
+  return ((voltage / samples) * ( aref / 1024 ) * ( R1 / RE )) ;
 }
 
 // Printer den hentede information til den serielle monitor
@@ -189,29 +190,29 @@ void printOutput(struct gpsData *input, struct transmitData *output) {
 
 // Konverterer en streng bestående af tal om til en uint64
 uint64_t turnToUint64(String stringy, uint8_t pow = 10) {
-	uint8_t strln = stringy.length();
-	uint64_t sum = 0;
-  	for (uint8_t i = 0 ; i < strln ; i++) {
-  		uint64_t power = 1;
-  		for (uint8_t j = 0 ; j < strln - 1 - i ; j++){
-  			power = power * pow;
-  		}
-  		sum += stringy.substring(i,i+1).toInt() * power;
-  	}
-  	return sum;
+  uint8_t strln = stringy.length();
+  uint64_t sum = 0;
+    for (uint8_t i = 0 ; i < strln ; i++) {
+      uint64_t power = 1;
+      for (uint8_t j = 0 ; j < strln - 1 - i ; j++){
+        power = power * pow;
+      }
+      sum += stringy.substring(i,i+1).toInt() * power;
+    }
+    return sum;
 }
 
 // Konverterer en streng bestående af tal om til en int
 int turnToInt(String stringy, uint8_t strln, uint8_t pow = 10) {
-	int sum = 0;
-  	for (uint8_t i = 0 ; i < strln ; i++) {
-  		int power = 1;
-  		for (uint8_t j = 0 ; j < strln - 1 - i ; j++){
-  			power = power * pow;
-  		}
-  		sum += stringy.substring(i,i+1).toInt() * power;
-  	}
-  	return sum;
+  int sum = 0;
+    for (uint8_t i = 0 ; i < strln ; i++) {
+      int power = 1;
+      for (uint8_t j = 0 ; j < strln - 1 - i ; j++){
+        power = power * pow;
+      }
+      sum += stringy.substring(i,i+1).toInt() * power;
+    }
+    return sum;
 }
 
 // Kontrolerer at den modtagede data giver mening
@@ -228,13 +229,13 @@ bool sanityCheck(struct gpsData *input) {
     #endif
   }
 
-	if (pulled.latitude.length() == 10)
-	{
-	  latitudeChk = true;
+  if (pulled.latitude.length() == 10)
+  {
+    latitudeChk = true;
     #ifdef serialPrinting
     Serial.print("Latitude : ");Serial.println(pulled.latitude.length());
     #endif
-	}
+  }
 
   if (data.voltage > 90 && data.voltage < 210 || true)
   {
@@ -248,13 +249,13 @@ bool sanityCheck(struct gpsData *input) {
     #ifdef serialPrinting
     Serial.println("Sanity check passed!");
     #endif
-	  return true;
+    return true;
   }
-	
+  
 
   else if (longitudeChk != true || latitudeChk != true || batteryChk != true){
     #ifdef serialPrinting
-		Serial.println("Sanity check failed");
+    Serial.println("Sanity check failed");
     if (longitudeChk != true){
       Serial.println("Longitude is incorrect");
       Serial.print("Longitude string length : "); Serial.println(pulled.longitude.length());
@@ -269,7 +270,7 @@ bool sanityCheck(struct gpsData *input) {
     }
     #endif
     return false;
-	}
+  }
 }
 
 // Konverterer en uint64 til en hex streng
@@ -360,9 +361,9 @@ void setupMPU() {
   Wire.beginTransmission(0b1101000); //I2C address of the MPU
   Wire.write(0x1C); //Accessing the register 1C - Acccelerometer Configuration (Sec. 4.5)
   //Wire.write(0b00000000); LSB = 16384.0; //Setting the accel to +/- 2g
-  Wire.write(0b00001000); LSB = 8192.0; //Setting the accel to +/- 4g
+  //Wire.write(0b00001000); LSB = 8192.0; //Setting the accel to +/- 4g
   //Wire.write(0b00010000); LSB = 4096.0; //Setting the accel to +/- 8g
-  //Wire.write(0b00011000); LSB = 2048.0; //Setting the accel to +/- 16g
+  Wire.write(0b00011000); LSB = 2048.0; //Setting the accel to +/- 16g
   Wire.endTransmission();
 }
 
@@ -399,13 +400,13 @@ float jolty() {
 
 // Ændrer alarm variblen for et jolt
 void alarmCheck(uint8_t *alarm) {
-	float jolt = jolty();
-	if (jolt >= jolt_val) {
-  		data.alarm = 32;
-  	}
-  	else if (jolt < jolt_val) { // FUCKING ALT GODT MAIN
-  		data.alarm = 64;
-  	}
+  float jolt = jolty();
+  if (jolt >= jolt_val) {
+      data.alarm = 32;
+    }
+    else if (jolt < jolt_val) { // FUCKING ALT GODT MAIN
+      data.alarm = 64;
+    }
 }
 
 // Konverterer GPS data fra DMS til DDS
@@ -447,26 +448,26 @@ void loop() {
 
   // Kontrolerer MPU data
   alarmCheck(&data.alarm);
-	for (int j = 0 ; j < gps_samp ; j ++){
-   	// Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
-   	gpsPull(&pulled);
+  for (int j = 0 ; j < gps_samp ; j ++){
+    // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
+    gpsPull(&pulled);
 
     // Hvis GPS-data opfylder basale krav
- 	 	if (sanityCheck(&pulled) == true)
-   	{
+    if (sanityCheck(&pulled) == true)
+    {
       // Data formateres til send-bart format
-   		gpsFormat(&pulled, &data, getVoltage() );
+      gpsFormat(&pulled, &data, getVoltage() );
 
       // GPS-data summeres som uint64_t variabel, og bliver konverteret til andet GPS-format
       latsum += turnToUint64(gpsConvert(data.latitude));
-     	lonsum += turnToUint64(gpsConvert(data.longitude));
+      lonsum += turnToUint64(gpsConvert(data.longitude));
       #ifdef serialPrinting
-   		Serial.print("Sample nr. : "); Serial.println(j);
+      Serial.print("Sample nr. : "); Serial.println(j);
       #endif
-   	}
-   	else { // Hvis GPS-data ikke opfylder krav, startes der forfra.
-   		j = -1;
-   	}
+    }
+    else { // Hvis GPS-data ikke opfylder krav, startes der forfra.
+      j = -1;
+    }
   }
   // gennemsnittet findes ved at dividere summen med antal samples
   latsum = latsum / gps_samp;
@@ -478,20 +479,20 @@ void loop() {
       // Printer GPS-data
       printOutput(&pulled, &data);
 
-     	// uint64_t sendlat = data.latitude.toInt();
-     	SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
+      // uint64_t sendlat = data.latitude.toInt();
+      SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
 
       // Venter 10 minutter
-     	for (int sec = 0 ; sec < delayMinutes*60 ; sec ++){
-       	delay(1000);
-   	}
+      for (int sec = 0 ; sec < delayMinutes*60 ; sec ++){
+        delay(1000);
+    }
   }
   else { // Hvis sanityCheck fejler gøres intet. 
     #ifdef serialPrinting
-   	Serial.println("Sanity check failed!");
-   	Serial.print("Error code : "); Serial.println(sanity_val);
+    Serial.println("Sanity check failed!");
+    Serial.print("Error code : "); Serial.println(sanity_val);
     #endif
 
-   	delay(5000);
+    delay(5000);
   }
 }
