@@ -10,6 +10,7 @@
 #define aref 5.05
 #define jolt_val 5000
 #define gps_samp 10
+#define gps_interval 120 // Minutes between GPS capture
 
 // Et delay under 10 sender ikke
 #define delayMinutes 10
@@ -23,6 +24,8 @@ uint8_t sanity_val = 0;
 
 long accelX, accelY, accelZ;
 float aX, aY, aZ, LSB;
+long gpsTimer = 0; 
+long gpsTimerPrev = 0; 
 
 SoftwareSerial  GPS      (10,9);
 Akeru           akeru    (4, 5);
@@ -155,13 +158,14 @@ void gpsFormat(struct gpsData *input,struct transmitData *output, float voltageF
 float getVoltage(int samples = 100) {
   float voltage = 0;      // Sum af samlede spændinger
   uint16_t RA = 1000000;  // Intern modstand i Arduino
-  float RE = (R2 * RA) / (R2 + RA); // erstatning
+  float RE = (R2 * RA) / (R2 + RA); // erstatning for R2
 
   for (int i = 0; i < samples; i++) {
     voltage += analogRead(v_read_pin);
     delay(10);
   }
-  return ((voltage / samples) * ( aref / 1024 ) * ( R1 / RE )) ;
+  voltage = 1.0012 * ((voltage / samples) * ( aref / 1024 ) / ( RE / R1 + RE)) + 0.0638;
+  return voltage;
 }
 
 // Printer den hentede information til den serielle monitor
@@ -399,7 +403,7 @@ float jolty() {
 }
 
 // Ændrer alarm variblen for et jolt
-void alarmCheck(uint8_t *alarm) {
+void collisionCheck(uint8_t *alarm) {
   float jolt = jolty();
   if (jolt >= jolt_val) {
       data.alarm = 32;
@@ -439,7 +443,7 @@ void setup() {
     //SigFoxSetup();
 }
 
-void loop() {  
+void loopori() {  
   uint64_t latsum = 0;
   uint64_t lonsum = 0;
 
@@ -447,7 +451,7 @@ void loop() {
   //recordAccelRegisters();
 
   // Kontrolerer MPU data
-  alarmCheck(&data.alarm);
+  collisionCheck(&data.alarm);
   for (int j = 0 ; j < gps_samp ; j ++){
     // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
     gpsPull(&pulled);
@@ -494,5 +498,37 @@ void loop() {
     #endif
 
     delay(5000);
+  }
+}
+
+void loop() {
+  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+
+
+  collisionCheck(&data.alarm); // Checker efter kollision
+  data.voltage = getVoltage(); // Sætter spændingen som en værdi
+
+  if (gpsTimer > gpsTimerPrev + 60000*gps_interval){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+
+    gpsTimerPrev = gpsTimer; // Forrige måling sættes lige den nuværende måling
+
+    for (int j = 0 ; j < gps_samp ; j ++){
+    // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
+      gpsPull(&pulled);
+
+      // Hvis GPS-data opfylder basale krav
+      if (sanityCheck(&pulled) == true)
+      {
+        // Data formateres til send-bart format
+        gpsFormat(&pulled, &data, data.voltage);
+
+        // GPS-data summeres som uint64_t variabel, og bliver konverteret til andet GPS-format
+        latsum += turnToUint64(gpsConvert(data.latitude));
+        lonsum += turnToUint64(gpsConvert(data.longitude));
+      }
+      else { // Hvis GPS-data ikke opfylder krav, startes der forfra.
+        j = j - 1;
+      }
+    }
   }
 }
