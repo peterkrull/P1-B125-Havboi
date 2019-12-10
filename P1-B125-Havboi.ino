@@ -13,7 +13,7 @@
 #define aref 5.05
 #define jolt_val 5000
 #define gps_samp 60
-#define gps_interval 2 // Hours between GPS capture
+#define gps_interval 1 // Hours between GPS capture
 
 // Et delay under 10 sender ikke
 #define delayMinutes 10
@@ -24,6 +24,9 @@
 #define serialPrinting
 
 uint8_t sanity_val = 0;
+
+int loop_time = 0;
+int loop_delta = 0;
 
 long accelX, accelY, accelZ;
 float aX, aY, aZ, LSB;
@@ -435,7 +438,7 @@ String gpsConvert(String gpsData) {
 
 void setup() {
     #ifdef serialPrinting
-    Serial.begin(9600);
+    Serial.begin(115200);
     #endif
     Wire.begin();
     GPS.begin(9600);
@@ -500,13 +503,31 @@ void loopori() {
   }
 }
 
+void print_loop_time(){
+  loop_delta = millis() - loop_time;
+  loop_time = millis();
+  Serial.print("Loop time : "); Serial.print(loop_delta); Serial.println(" ms");
+}
+
 void loop() {
-  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+
+print_loop_time();
+
+  gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
 
   collisionCheck(&data.alarm); // Checker efter kollision
+Serial.println("gpsTimer     : "); Serial.println(gpsTimer);
+Serial.println("gpsTimerPrev : "); Serial.println(gpsTimerPrev);
 
-  if (gpsTimer > gpsTimerPrev + 3600000*gps_interval || data.alarm = badd_val){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+  if (gpsTimer > (gpsTimerPrev + 3600000*gps_interval - 10000)) { // 10 sekunder før GPS målinger, mosfet tændes
+    digitalWrite(GPS_fet_pin,HIGH);
+    GPS.listen();
+    GPS.flush();
+    GPS.read();
+  }
 
+  if (gpsTimer > gpsTimerPrev + 3600000*gps_interval || data.alarm == badd_val){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+   
   uint64_t latsum = 0;
   uint64_t lonsum = 0;
 
@@ -534,8 +555,8 @@ void loop() {
     }
     digitalWrite(GPS_fet_pin,LOW);   // Giver strøm til GPS-modulet gennem mosfet
 
-    latsum = latsum / gps_samp
-    lonsum = lonsum / gps_samp
+    latsum = latsum / gps_samp;
+    lonsum = lonsum / gps_samp;
 
     // Printer GPS-data
     printOutput(&pulled, &data);
@@ -548,7 +569,7 @@ void loop() {
   }
   else { // Hvis sanityCheck fejler gøres intet. 
     #ifdef serialPrinting
-    Serial.println("Sanity check failed!");
+    Serial.println("Not ready to send");
     Serial.print("Error code : "); Serial.println(sanity_val);
     #endif
   }
