@@ -7,10 +7,13 @@
 #define GPS_fet_pin 2
 #define v_read_pin A0
 
+#define good_val 16
+#define badd_val 17
+
 #define aref 5.05
 #define jolt_val 5000
-#define gps_samp 10
-#define gps_interval 120 // Minutes between GPS capture
+#define gps_samp 60
+#define gps_interval 2 // Hours between GPS capture
 
 // Et delay under 10 sender ikke
 #define delayMinutes 10
@@ -164,7 +167,7 @@ float getVoltage(int samples = 100) {
     voltage += analogRead(v_read_pin);
     delay(10);
   }
-  voltage = 1.0012 * ((voltage / samples) * ( aref / 1024 ) / ( RE / R1 + RE)) + 0.0638;
+  voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / R1 + RE));
   return voltage;
 }
 
@@ -405,11 +408,11 @@ float jolty() {
 // Ændrer alarm variblen for et jolt
 void collisionCheck(uint8_t *alarm) {
   float jolt = jolty();
-  if (jolt >= jolt_val) {
-      data.alarm = 32;
+    if (jolt < jolt_val) { // FUCKING ALT GODT MAIN
+      data.alarm = good_val;
     }
-    else if (jolt < jolt_val) { // FUCKING ALT GODT MAIN
-      data.alarm = 64;
+    else if (jolt >= jolt_val) {
+      data.alarm = badd_val;
     }
 }
 
@@ -436,9 +439,9 @@ void setup() {
     #endif
     Wire.begin();
     GPS.begin(9600);
-    pinMode(v_read_pin,INPUT);      // Pin bruges
+    pinMode(v_read_pin,INPUT);        // Pin bruges
     pinMode(GPS_fet_pin,OUTPUT);      // Pin bruges
-    digitalWrite(GPS_fet_pin,HIGH);   // Giver strøm til GPS-modulet gennem mosfet
+    digitalWrite(GPS_fet_pin,LOW);    // Giver strøm til GPS-modulet gennem mosfet
     setupMPU();
     //SigFoxSetup();
 }
@@ -480,11 +483,7 @@ void loopori() {
   // Hvis GPS-data er korrekt
   if (sanityCheck(&pulled) == true)
   {
-      // Printer GPS-data
-      printOutput(&pulled, &data);
-
-      // uint64_t sendlat = data.latitude.toInt();
-      SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
+      
 
       // Venter 10 minutter
       for (int sec = 0 ; sec < delayMinutes*60 ; sec ++){
@@ -504,13 +503,16 @@ void loopori() {
 void loop() {
   gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
 
-
   collisionCheck(&data.alarm); // Checker efter kollision
-  data.voltage = getVoltage(); // Sætter spændingen som en værdi
 
-  if (gpsTimer > gpsTimerPrev + 60000*gps_interval){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+  if (gpsTimer > gpsTimerPrev + 3600000*gps_interval || data.alarm = badd_val){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+
+  uint64_t latsum = 0;
+  uint64_t lonsum = 0;
 
     gpsTimerPrev = gpsTimer; // Forrige måling sættes lige den nuværende måling
+
+    digitalWrite(GPS_fet_pin,HIGH);   // Giver strøm til GPS-modulet gennem mosfet
 
     for (int j = 0 ; j < gps_samp ; j ++){
     // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
@@ -530,5 +532,24 @@ void loop() {
         j = j - 1;
       }
     }
+    digitalWrite(GPS_fet_pin,LOW);   // Giver strøm til GPS-modulet gennem mosfet
+
+    latsum = latsum / gps_samp
+    lonsum = lonsum / gps_samp
+
+    // Printer GPS-data
+    printOutput(&pulled, &data);
+
+    // Sætter spændingen som en værdi
+    data.voltage = getVoltage();
+
+    // uint64_t sendlat = data.latitude.toInt();
+    SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
+  }
+  else { // Hvis sanityCheck fejler gøres intet. 
+    #ifdef serialPrinting
+    Serial.println("Sanity check failed!");
+    Serial.print("Error code : "); Serial.println(sanity_val);
+    #endif
   }
 }
