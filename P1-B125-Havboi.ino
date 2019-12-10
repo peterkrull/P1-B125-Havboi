@@ -4,7 +4,14 @@
 #include <Wire.h>
 #include "Akeru.h"
 
-#define debug_bit 16    // set to 1 to send msg 16 to debug
+// DEBUG SECTION //
+
+#define debug_bit 1    // set to 1 to send msg 16 to debug
+#define serialPrinting  // Undefine to disable all serial printing
+
+// END OF DEBUG //
+
+// CONFIG SECTON //
 
 #define GPS_fet_pin 2   // Pin for GPS switch fet
 #define v_read_pin A0   // Pin for battery readout
@@ -15,17 +22,23 @@
 #define aref 5.05       // Analog reference voltage
 #define jolt_max 50     // Max allowed jolt for bouey
 #define gps_samp 60     // GPS samples for each recording
+#define attempts 60     // Allowed failed attempts at GPS lock
 #define gps_interval 1  // Hours between GPS phone-home
 
 #define R1 38.3         // R1 resistance in k Ohm 
 #define R2 10.0         // R2 resistance in k Ohm
 #define RA 100000       // ADC resistance in k Ohm
 
-//#define serialPrinting  // Undefine to disable all serial printing
+// END OF CONFIG //
+
+// INITIALIZATION OF COMMS //
 
 SoftwareSerial  GPS      (10,9);
 Akeru           akeru    (4, 5);
 
+// END OF INITIALIZATION //
+
+// GLOBAL VARIABLES
 uint8_t sanity_val = 0;
 
 int loop_time = 0;
@@ -53,7 +66,9 @@ struct gpsData{
     String longhem;
 } pulled;
 
-// Trækker data ud af GPS-modulets serielle output og placerer det i et struct
+// END OF GLOBAL VALS //
+
+// Pulls the GPS data and places it in gpsData struct variable
 void gpsPull(struct gpsData *input) {
   int pos = 0;                    // Variabel til at holde positionen i arrayet place[]
   String tempMsg = GPS.readStringUntil('\n'); // GPS output for $GPRMC linjen placeres i en tempMsg string
@@ -96,7 +111,7 @@ void gpsPull(struct gpsData *input) {
   input -> longhem = place[5]; // long hem
 }
 
-// Formaterer GPS data til afsending. Fra streng til streng
+// Formats the GPS data for sending. From string to string
 void gpsFormat(struct gpsData *input,struct transmitData *output) {
 
     //              SECTION FOR FORMATTING TIME             //
@@ -149,6 +164,7 @@ void gpsFormat(struct gpsData *input,struct transmitData *output) {
     output -> longitude = longString; 
 }
 
+// Formats the voltage to a uint8 with no decimal place
 uint8_t formatVolt(float voltageFloat){
     uint8_t voltage;
     voltage = (int)round(voltageFloat * 10);
@@ -159,7 +175,7 @@ uint8_t formatVolt(float voltageFloat){
     return voltage;
 }
 
-// Udregner spænding på batteriet, ud fra et gennemsnit af målinger 
+// Calculates the voltage of the battery according to voltage divider 
 float getVoltage(int samples = 100) {
   float voltage = 0;      // Sum af samlede spændinger
   float RE = (R2 * RA) / (R2 + RA); // erstatning for R2
@@ -173,7 +189,7 @@ float getVoltage(int samples = 100) {
   return voltage;
 }
 
-// Printer den hentede information til den serielle monitor
+// Prints formatted and raw long, lat and voltage to serial monitor
 void printOutput(struct gpsData *input, struct transmitData *output) {
   #ifdef serialPrinting
   /*
@@ -197,7 +213,7 @@ void printOutput(struct gpsData *input, struct transmitData *output) {
   #endif
 }
 
-// Konverterer en streng bestående af tal om til en uint64
+// Converts a number string to uint64
 uint64_t turnToUint64(String stringy, uint8_t pow = 10) {
   uint8_t strln = stringy.length();
   uint64_t sum = 0;
@@ -211,7 +227,7 @@ uint64_t turnToUint64(String stringy, uint8_t pow = 10) {
     return sum;
 }
 
-// Konverterer en streng bestående af tal om til en int
+// Converts a number string to int (exclusive to )
 int turnToInt(String stringy, uint8_t strln, uint8_t pow = 10) {
   int sum = 0;
     for (uint8_t i = 0 ; i < strln ; i++) {
@@ -336,7 +352,6 @@ void SigFoxSend(uint64_t latt, uint64_t lonn, uint8_t volt, uint8_t alarm) {
     Serial.println("Message sent !");
     #endif
   }
-
   // akeru. not working!
 }
 
@@ -375,19 +390,7 @@ void setupMPU() {
   Wire.write(0b00011000); LSB = 2048.0; //Setting the accel to +/- 16g
   Wire.endTransmission();
 }
-/*
-// Registrerer data fra MPU'en
-void recordAccelRegisters() {
-  Wire.beginTransmission(0b1101000); //I2C address of the MPU
-  Wire.write(0x3B); //Starting register for Accel Readings
-  Wire.endTransmission();
-  Wire.requestFrom(0b1101000, 6); //Request Accel Registers (3B - 40)
-  while (Wire.available() < 6);
-  accelX = Wire.read() << 8 | Wire.read(); //Store first two bytes into accelX
-  accelY = Wire.read() << 8 | Wire.read(); //Store middle two bytes into accelY
-  accelZ = Wire.read() << 8 | Wire.read(); //Store last two bytes into accelZ
-}
-*/
+
 // Udregner en jolt-værdi for ud fra MPU-data
 float jolty() {
   float oldX = aX;
@@ -476,11 +479,11 @@ void setup() {
 void loop() {
 
   //print_loop_time();
-  delay(25);
-  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
-  //gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
+  //gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+  gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
 
   collisionCheck(&data.alarm, jolty()); // Checker efter kollision
+  delay(25);
 
   if (gpsTimer > (gpsTimerPrev + 3600000*gps_interval - 10000)) { // 10 sekunder før GPS målinger, mosfet tændes
     digitalWrite(GPS_fet_pin,HIGH);
@@ -500,11 +503,12 @@ void loop() {
     gpsTimerPrev = gpsTimer; // Forrige måling sættes lige den nuværende måling
 
     digitalWrite(GPS_fet_pin,HIGH);   // Giver strøm til GPS-modulet gennem mosfet
-
+    int failed;
     for (int j = 0 ; j < gps_samp ; j ++){
 
       #ifdef serialPrinting
-      Serial.print("Taking sample # "); Serial.print(j+1); Serial.print(" out of "); Serial.println(gps_samp);
+      Serial.print("Taking sample   # "); Serial.print(j+1); Serial.print(" out of "); Serial.println(gps_samp);
+      Serial.print("Failed attempts # "); Serial.print(failed); Serial.print(" out of "); Serial.println(attempts);
       #endif
 
       // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
@@ -522,6 +526,12 @@ void loop() {
       }
       else { // Hvis GPS-data ikke opfylder krav, startes der forfra.
         j = j - 1;
+        failed++;
+      }
+      if (failed > attempts) {
+        j = gps_samp;
+        latsum = 3000000000*gps_samp;
+        lonsum = 30000000000*gps_samp;
       }
     }
     digitalWrite(GPS_fet_pin,LOW);   // Giver strøm til GPS-modulet gennem mosfet
@@ -535,6 +545,6 @@ void loop() {
 
     // uint64_t sendlat = data.latitude.toInt();
     SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
-    biggestJolt = 0;
+    failed = 0;
   }
 }
