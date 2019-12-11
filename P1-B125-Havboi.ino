@@ -8,7 +8,7 @@
 
 //#define debugNoMessage  // Enables no sending mode    Undefine to disable
 #define serialPrinting  // Enables serial printing    Undefine to disable
-#define spoofVol 5.57  // Sets a custom voltage      Undefine to disable
+#define spoofVol 10.57  // Sets a custom voltage      Undefine to disable
 
 // END OF DEBUG //
 
@@ -152,8 +152,8 @@ uint8_t formatVolt(float voltageFloat){
   uint8_t voltage;
   voltage = (int)round(voltageFloat * 10);
 
-  if (voltage < 50){
-    voltage = 50;
+  if (voltage < 16){
+    voltage = 16;
   }
   return voltage;
 }
@@ -241,7 +241,7 @@ bool sanityCheck(struct gpsData *input) {
     latitudeChk = true;
   }
 
-  if (data.voltage >= 100 && data.voltage <= 254)
+  if (data.voltage >= 16 && data.voltage <= 254)
   {
     batteryChk = true;
   }
@@ -254,8 +254,8 @@ bool sanityCheck(struct gpsData *input) {
   } 
 
   else if (longitudeChk != true || latitudeChk != true || batteryChk != true){
-    /*#ifdef serialPrinting
     Serial.println("Sanity check failed");
+    /*#ifdef serialPrinting
     if (longitudeChk != true){
       Serial.println("Longitude is incorrect");
     }
@@ -463,8 +463,8 @@ void setup() {
 void loop() {
 
   //print_loop_time();
-  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
-  //gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
+  //gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+  gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
 
   collisionCheck(&data.alarm, jolty()); // Checker efter kollision
   delay(25);
@@ -498,12 +498,12 @@ void loop() {
 
       // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
       gpsPull(&pulled);
-
       // Hvis GPS-data opfylder basale krav
       if (sanityCheck(&pulled) == true)
       {
         // Data formateres til send-bart format
         gpsFormat(&pulled, &data);
+        
 
         // GPS-data summeres som uint64_t variabel, og bliver konverteret til andet GPS-format
         latsum += turnToUint64(gpsConvert(data.latitude));
@@ -526,7 +526,6 @@ void loop() {
 
     // Printer GPS-data
     printOutput(&pulled, &data);
-
 
     // uint64_t sendlat = data.latitude.toInt();
     SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
