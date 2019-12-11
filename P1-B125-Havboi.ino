@@ -6,9 +6,9 @@
 
 // DEBUG SECTION //
 
-#define debugNoMessage  // Enables no sending mode    Undefine to disable
+//#define debugNoMessage  // Enables no sending mode    Undefine to disable
 #define serialPrinting  // Enables serial printing    Undefine to disable
-#define spoofVol 18.57  // Sets a custom voltage      Undefine to disable
+#define spoofVol 5.57  // Sets a custom voltage      Undefine to disable
 
 // END OF DEBUG //
 
@@ -21,9 +21,9 @@
 #define badd_val 17     // Value for detected collision
 
 #define aref 5.05       // Analog reference voltage
-#define jolt_max 50     // Max allowed jolt for bouey
+#define jolt_max 5000   // Max allowed jolt for bouey
 #define gps_samp 60     // GPS samples for each recording
-#define attempts 60     // Allowed failed attempts at GPS lock
+#define attempts 5     // Allowed failed attempts at GPS lock
 #define gps_interval 1  // Hours between GPS phone-home
 
 #define R1 38.3         // R1 resistance in k Ohm 
@@ -39,7 +39,8 @@ Akeru           akeru    (4, 5);
 
 // END OF INITIALIZATION //
 
-// GLOBAL VARIABLES
+// GLOBAL VARIABLES //
+
 uint8_t sanity_val = 0;
 
 int loop_time = 0;
@@ -151,8 +152,8 @@ uint8_t formatVolt(float voltageFloat){
   uint8_t voltage;
   voltage = (int)round(voltageFloat * 10);
 
-  if (voltage < 100){
-    voltage = 100;
+  if (voltage < 50){
+    voltage = 50;
   }
   return voltage;
 }
@@ -166,6 +167,10 @@ float getVoltage(int samples = 100) {
     voltage += analogRead(v_read_pin);
     delay(10);
   }
+
+
+
+
   #ifndef spoofVol
   voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / R1 + RE));
   #endif
@@ -210,7 +215,7 @@ uint64_t turnToUint64(String stringy, uint8_t pow = 10) {
       }
       sum += stringy.substring(i,i+1).toInt() * power;
     }
-    return sum;
+  return sum;
 }
 
 // Makes sure the recieved data is valid
@@ -386,7 +391,7 @@ float jolty() {
   aY = (accelY / LSB) * 9.82;
   aZ = (accelZ / LSB) * 9.82;
 
-  float jol = sqrt(sq(oldX - aX) + sq(oldY - aY) + sq(oldZ - aZ));
+  float jol = sqrt(sq((oldX - aX)/0.025) + sq((oldY - aY)/0.025) + sq((oldZ - aZ)/0.025));
   return jol;
 }
 
@@ -458,8 +463,8 @@ void setup() {
 void loop() {
 
   //print_loop_time();
-  //gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
-  gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
+  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+  //gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
 
   collisionCheck(&data.alarm, jolty()); // Checker efter kollision
   delay(25);
