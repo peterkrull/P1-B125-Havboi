@@ -17,6 +17,9 @@
 #define GPS_fet_pin 2   // Pin for GPS switch fet
 #define v_read_pin A0   // Pin for battery readout
 
+#define batLowest 10
+#define batWarning 12
+
 #define good_val 16     // Value for no anomaly
 #define badd_val 17     // Value for detected collision
 
@@ -408,20 +411,41 @@ void collisionCheck(uint8_t *alarm, float jolt) {
 }
 
 // Converts GPS data from DMS (degree,minute,second) to DDM (degree,decimal minute)
-String gpsConvert(String gpsData) {
-  String temp1;
-  String temp2;
-  temp1 = String((gpsData.substring(4,gpsData.length()+1).toFloat()/60.0));
-  for(uint8_t i = 0; i < gpsData.length(); i++)
+String gpsConvert(String gpsData)
+{
+  String temp1; //Create temporary string
+  String temp2; //Create temporary string
+  
+  if(gpsData.length() == 10)      //Check if the string is lattitude
   {
-    if(temp1.substring(i,i+1) == ".")
+    //Cut out minutes from the string, convert to float, divide by 6.000.000 then convert to string                                                        
+    temp1 = String((gpsData.substring(3,gpsData.length()+1).toFloat()/6000000),7);
+  }
+  else if(gpsData.length() == 11) //Check if the string is longtitude
+  {
+    //Cut out minutes from the string, convert to float, divide by 6.000.000 then convert to string
+    temp1 = String((gpsData.substring(4,gpsData.length()+1).toFloat()/6000000),7);
+  }
+
+  //Count i up to check where "." is in the string.
+  for(uint8_t i = 0; i < gpsData.length(); i++) 
+  {
+    if(temp1.substring(i,i+1) == ".")   //Check if the i placement in the string is "."
     {
-      //Serial.println("1");
-      temp2 = temp1.substring(0,i);
-      temp2 += temp1.substring(i+1,i+3);
+      temp2 = temp1.substring(i-1,i+8); //Cut off "." and everything before it 
     } 
   }
-  return(gpsData.substring(0,4) + temp2); 
+
+  if(gpsData.length() == 10)      //Check if the string is lattitude
+  {
+    //Combine and return the first 2 places from the original string with the 7 places from the converted minutes
+    return(gpsData.substring(0,3) + temp2.substring(2,10)); 
+  }
+  else if(gpsData.length() == 11) //Check if the string is longtitude
+  {
+    //Combine and return the first 2 places from the original string with the 7 places from the converted minutes
+    return(gpsData.substring(0,4) + temp2.substring(2,10));
+  }
 }
 
 // Calculates and prints the loop time to the console
