@@ -115,66 +115,59 @@ void gpsPull(struct gpsData *output) {
 // Formats the GPS data for sending. From string to string
 void gpsFormat(struct gpsData *input,struct transmitData *output) {
 
-    //   H900000000 - H is 1 for positive, 2 for negative   // 10 karakterer
+    //   H900000000 - H is 1 for positive, 2 for negative   // 10 chars
 
-    String latfirst, latsecond, latString, lathem;
-    latfirst = input -> latitude.substring(0,4);
-    latsecond = input -> latitude.substring(5,10);
+    String latfirst, latsecond, latString, lathem; // Substrings
+    latfirst = input -> latitude.substring(0,4); // Get numbers before comma
+    latsecond = input -> latitude.substring(5,10); // Get numbers after comma
 
 
-         if (input -> lathem == "N") lathem = "1";
-    else if (input -> lathem == "S") lathem = "2";
+         if (input -> lathem == "N") lathem = "1"; // If north, number is 1
+    else if (input -> lathem == "S") lathem = "2"; // If south, number is 2
     
 
-    latString = lathem + latfirst + latsecond;
-    output -> latitude = latString; 
+    latString = lathem + latfirst + latsecond; // numbers are combined
+    output -> latitude = latString;  // Exported to output
 
-    //   H1800000000 - H is 1 for positive, 2 for negative  // 11 karakterer
+    //   H1800000000 - H is 1 for positive, 2 for negative  // 11 chars
 
-    String longfirst, longsecond, longString, longhem;
+    String longfirst, longsecond, longString, longhem; // Substrings
+    longfirst = input -> longitude.substring(0,5); // Get numbers before comma
+    longsecond = input -> longitude.substring(6,11); // Get numbers after comma
 
-    longfirst = input -> longitude.substring(0,5);
-    longsecond = input -> longitude.substring(6,11);
+         if (input -> longhem == "E") longhem = "1"; // If east, number is 1
+    else if (input -> longhem == "W") longhem = "2"; // If west, number is 2
 
-         if (input -> longhem == "E") longhem = "1";
-    else if (input -> longhem == "W") longhem = "2";
-
-    longString = longhem + longfirst + longsecond;
-    output -> longitude = longString; 
+    longString = longhem + longfirst + longsecond; // numbers are combined
+    output -> longitude = longString; // Exported to output
 }
 
 // Formats the voltage to a uint8 with no decimal place
 uint8_t formatVolt(float voltageFloat){
+  uint8_t voltage; // variable to hold final voltage
+  voltage = (int)round(voltageFloat * 10); // voltage is convrted so xx.yy becomes xxy
 
-  // 18.543 returns 186
-
-  uint8_t voltage;
-  voltage = (int)round(voltageFloat * 10);
-
-  if (voltage < 16){
-    voltage = 16;
+  if (voltage < 16){ // Is voltage is less than 16 (due to lowest 2 char hex value)
+    voltage = 16; // set to 16
   }
-  return voltage;
+  return voltage; // return voltage
 }
 
 // Calculates the voltage of the battery according to voltage divider 
 float getVoltage(int samples = 100) {
-  float voltage = 0;      // Sum af samlede spændinger
-  float RE = (R2 * RA) / (R2 + RA); // erstatning for R2
+  float voltage = 0;      // Sum of voltage average
+  float RE = (R2 * RA) / (R2 + RA); // Replacement resistance for R2
 
-  for (int i = 0; i < samples; i++) {
-    voltage += analogRead(v_read_pin);
-    delay(10);
+  for (int i = 0; i < samples; i++) { // For loop to do multiple samples
+    voltage += analogRead(v_read_pin); // Analog value is added to itself
+    delay(10); // slight delay for stability
   }
 
-
-
-  voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / (R1 + RE)));
   #ifndef spoofVol
- 
+  voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / (R1 + RE))); // Voltage divider calc and ADC conv
   #endif
   #ifdef spoofVol
-    voltage = spoofVol;
+    voltage = spoofVol; // Allows for voltage spoofing for testing purposes
   #endif
   return voltage;
 }
@@ -182,12 +175,6 @@ float getVoltage(int samples = 100) {
 // Prints formatted and raw long, lat and voltage to serial monitor
 void printOutput(struct gpsData *input, struct transmitData *output) {
   #ifdef serialPrinting
-  /*
-    Serial.print("date pulled: ");Serial.println(input -> date);
-    Serial.print("time pulled: ");Serial.println(input -> time);
-    Serial.print("time format: ");Serial.println(output -> time);
-    Serial.println("");
-  */
     Serial.print("lat pulled: ");Serial.println(input -> latitude);
     Serial.print("lat format: ");Serial.println(output -> latitude);
     Serial.println("");
@@ -205,16 +192,16 @@ void printOutput(struct gpsData *input, struct transmitData *output) {
 
 // Converts a number string to uint64
 uint64_t turnToUint64(String stringy, uint8_t pow = 10) {
-  uint8_t strln = stringy.length();
-  uint64_t sum = 0;
-    for (uint8_t i = 0 ; i < strln ; i++) {
-      uint64_t power = 1;
-      for (uint8_t j = 0 ; j < strln - 1 - i ; j++){
-        power = power * pow;
+  uint8_t strln = stringy.length(); // Note length of input string
+  uint64_t sum = 0; // Sum used to hold output number
+    for (uint8_t i = 0 ; i < strln ; i++) { // For loop for each number in string
+      uint64_t power = 1; // Power of 1 is default
+      for (uint8_t j = 0 ; j < strln - 1 - i ; j++){ // Power is dependant on position of number
+        power = power * pow; // power is multiplied by (10) set amount of times
       }
-      sum += stringy.substring(i,i+1).toInt() * power;
+      sum += stringy.substring(i,i+1).toInt() * power; // Numbers are sequentially added together
     }
-  return sum;
+  return sum; // return final sum
 }
 
 // Makes sure the recieved data is valid
@@ -226,48 +213,37 @@ bool sanityCheck(struct gpsData *input) {
   Serial.print("Battery voltage  : ");Serial.println(data.voltage);
   #endif 
 
-  bool longitudeChk = false;
+  bool longitudeChk = false; // sanity check failed by defailt
   bool latitudeChk = false;
   bool batteryChk = false;
 
-  if (pulled.longitude.length() == 11)
+  if (pulled.longitude.length() == 11) // If longitude is of length 11.. 
   {
-    longitudeChk = true;
+    longitudeChk = true; //.. it passes the test
   }
 
-  if (pulled.latitude.length() == 10)
+  if (pulled.latitude.length() == 10) // If latitude is of length 10.. 
   {
-    latitudeChk = true;
+    latitudeChk = true; //.. it passes the test
   }
 
-  if (data.voltage >= 16 && data.voltage <= 254)
+  if (data.voltage >= 16 && data.voltage <= 255) //if converted voltage is between 16 and 255
   {
-    batteryChk = true;
+    batteryChk = true; //.. it passes the test
   }
 
-  if (longitudeChk == true && latitudeChk == true){// & batteryChk == true){
+  if (longitudeChk == true && latitudeChk == true){ // if all checks pass..
     #ifdef serialPrinting
     Serial.println("Sanity check passed!");
     #endif
-    return true;
+    return true; // ..return true
   } 
 
-  else if (longitudeChk != true || latitudeChk != true){// || batteryChk != true){
+  else if (longitudeChk != true || latitudeChk != true){ // if some checks do not pass..
     #ifdef serialPrinting
     Serial.println("Sanity check failed");
     #endif
-    /*#ifdef serialPrinting
-    if (longitudeChk != true){
-      Serial.println("Longitude is incorrect");
-    }
-    if (latitudeChk != true){
-      Serial.println("Latitude is incorrect");
-    }
-    if (batteryChk != true){
-      Serial.println("Battery is out of range");
-    }
-    #endif*/
-    return false;
+    return false; // ..return false
   }
 }
 
@@ -275,7 +251,6 @@ bool sanityCheck(struct gpsData *input) {
 String uint64ToString(uint64_t input) {
   String result = "";
   uint8_t base = 16;
-
   do {
     char c = input % base;
     input /= base;
@@ -313,16 +288,17 @@ void SigFoxSend(uint64_t latt, uint64_t lonn, uint8_t volt, uint8_t alarm) {
   #endif
 
   #ifndef debugNoMessage
-  const uint8_t trashbit = 1;
+  const uint8_t trashbit = 1; // bit of 1 allows for correct formatting
   #endif
   #ifdef debugNoMessage
-  const uint8_t trashbit = 16;
+  const uint8_t trashbit = 16; // bit of 16 cant send. Wrong format
   #endif
 
+  // Final message consists of all data formatted using uint64 to hex-string function
   String msg = uint64ToString(latt) + uint64ToString(lonn) + uint64ToString(volt) + uint64ToString(alarm) + uint64ToString(trashbit);
   #ifdef serialPrinting
   Serial.print("MSG:");
-  Serial.println(msg);
+  Serial.println(msg); // Print final message
   Serial.println("Sending");
   #endif
   //akeru.listen();
@@ -332,18 +308,6 @@ void SigFoxSend(uint64_t latt, uint64_t lonn, uint8_t volt, uint8_t alarm) {
     Serial.println("Message sent !");
     #endif
   }
-  // akeru. not working!
-}
-
-// Checks the checksum of the GPS data (Unused, not finished)
-char checkSum(String theseChars) {
-  char check = 0;
-  // iterate over the string, XOR each byte with the total sum:
-  for (int c = 0; c < theseChars.length(); c++) {
-    check = char(check ^ theseChars.charAt(c));
-  } 
-  // return the result
-  return check;
 }
 
 // Initializes the MPU
@@ -373,7 +337,7 @@ void setupMPU() {
 
 // Calculates a Jolt value from the MPU
 float jolty() {
-  float oldX = aX;
+  float oldX = aX; // sets previous values in their own variables
   float oldY = aY;
   float oldZ = aZ;
 
@@ -394,19 +358,19 @@ float jolty() {
 
   // Length of Jolt vector is determined
   float jolt = sqrt(sq((oldX - aX)/0.025) + sq((oldY - aY)/0.025) + sq((oldZ - aZ)/0.025));
-  return jolt;
+  return jolt; // return value length of jolt
 }
 
 // Checks wether the jolt value is out of range
 void collisionCheck(uint8_t *alarm, float jolt) {
-    if (jolt < jolt_max) { // FUCKING ALT GODT MAIN
-      data.alarm = good_val;
+    if (jolt < jolt_max) { // Everything good
+      data.alarm = good_val; // alarm value is set to bad value
       #ifdef serialPrinting
       Serial.print("No collision - Good val      : "); Serial.println(jolt);
       #endif
     }
-    else if (jolt >= jolt_max) {
-      data.alarm = badd_val;
+    else if (jolt >= jolt_max) { // Jolt value is too high
+      data.alarm = badd_val; // alarm value is set to good value
       for (int i = 0 ; i < 5 ; i++){
         #ifdef serialPrinting
         Serial.print("COLLISION DETECTED - BAD VAL : "); Serial.println(jolt);
@@ -455,8 +419,8 @@ String gpsConvert(String gpsData) {
 // Calculates and prints the loop time to the console
 void print_loop_time(){
   
-  loop_delta = millis() - loop_time;
-  loop_time = millis();
+  loop_delta = millis() - loop_time; // Calculates difference between current time and previous
+  loop_time = millis(); // Determine new current time
   #ifdef serialPrinting
   Serial.print("Loop time : "); Serial.print(loop_delta); Serial.println(" ms");
   #endif
@@ -483,31 +447,33 @@ void setup() {
 
 // Program loop (MAIN LOOP)
 void loop() {
-  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
+  gpsTimer = millis(); // Time variable used to determine when to activate GPS
 
-  collisionCheck(&data.alarm, jolty()); // Checker efter kollision
+  collisionCheck(&data.alarm, jolty()); // Checks for collision
   delay(25); // 25 milliseconds is required for the 40hz MPU
 
-  if (gpsTimer > (gpsTimerPrev + 3600000*gps_interval - 10000)) { // 10 sekunder før GPS målinger, mosfet tændes
+  // 10 seconds before GPS measurements, mosfet is switched in
+  if (gpsTimer > (gpsTimerPrev + 3600000*gps_interval - 10000)) { 
     digitalWrite(GPS_fet_pin,HIGH);
     GPS.listen();
     GPS.flush();
     GPS.read();
   }
 
-  if (gpsTimer > gpsTimerPrev + 3600000*gps_interval || data.alarm == badd_val){ // Hvis der er gået mere end gps_interval antal minutter udføres dette
+  // If the timer has passed gps_interval minutes or a jolt is detected, collect data
+  if (gpsTimer > gpsTimerPrev + 3600000*gps_interval || data.alarm == badd_val){ 
    
     uint64_t latsum = 0;
     uint64_t lonsum = 0;
 
-    // Sætter spændingen som en værdi
+    // voltage value is set to formatted voltage
     data.voltage = formatVolt(getVoltage());
 
-    gpsTimerPrev = gpsTimer; // Forrige måling sættes lige den nuværende måling
+    gpsTimerPrev = gpsTimer; // Previous GPS time is set to current time
 
-    digitalWrite(GPS_fet_pin,HIGH);   // Giver strøm til GPS-modulet gennem mosfet
-    int failed;
-    for (int j = 0 ; j < gps_samp ; j ++){
+    digitalWrite(GPS_fet_pin,HIGH);   // Mosfet is switched on (if it wasnt previously)
+    int failed = 0;
+    for (int j = 0 ; j < gps_samp ; j ++){ // Multiple samples are collected gps_samp times
 
       #ifdef serialPrinting
       Serial.print("Taking sample   # "); Serial.print(j+1); Serial.print(" out of "); Serial.println(gps_samp);
@@ -515,48 +481,41 @@ void loop() {
       Serial.println("\n");
       #endif
 
-      // Data fra GPS-modulet hentes og leveres i allData struct til nem aflæsning
+      // Data from GPS is pulled and placed in struct
       gpsPull(&pulled);
-      // Hvis GPS-data opfylder basale krav
+      // If data passes sanity check
       if (sanityCheck(&pulled) == true)
       {
-        // Data formateres til send-bart format
+        // Data is formatted
         gpsFormat(&pulled, &data);
         
-
-        // GPS-data summeres som uint64_t variabel, og bliver konverteret til andet GPS-format
+        // GPS data is added together
         latsum += turnToUint64(gpsConvert(data.latitude));
         lonsum += turnToUint64(gpsConvert(data.longitude));
       }
-      else { // Hvis GPS-data ikke opfylder krav, startes der forfra.
+      else { // If GPS checks fail..
         j = j - 1;
-        failed++;
+        failed++; // .. fail counter goes up
       }
-      if (failed > attempts) {
-        j = gps_samp;
-        latsum = 3000000000*gps_samp;
-        lonsum = 30000000000*gps_samp;
+      if (failed > attempts) { // If failed attemps surpass limit
+        j = gps_samp; // For loop is broken
+        latsum = 3000000000*gps_samp; // latitude is set to unreal value
+        lonsum = 30000000000*gps_samp; // longitude is set to unreal value
       }
     }
-    digitalWrite(GPS_fet_pin,LOW);   // Giver strøm til GPS-modulet gennem mosfet
+    digitalWrite(GPS_fet_pin,LOW);   // Switches off mosfet to disable GPS
 
-    latsum = latsum / gps_samp;
-    lonsum = lonsum / gps_samp;
+    latsum = latsum / gps_samp; // average of latitude measurements is taken
+    lonsum = lonsum / gps_samp; // average of longitude measurements is taken
 
-    // Printer GPS-data
+    // Prints the GPS data
     printOutput(&pulled, &data);
 
-    // uint64_t sendlat = data.latitude.toInt();
+    // All data is sent using Sigfox
     SigFoxSend( latsum , lonsum , data.voltage, data.alarm);
-    failed = 0;
-    aX = 0;
+    failed = 0; // Failed attempts is reset
+    aX = 0; // acceleration values work better if reset
     aY = 0;
     aZ = 0;
   }
-}
-
-void loop2(){
-  #ifdef serialPrinting
-  Serial.print(""); Serial.println(getVoltage());
-  #endif
 }
