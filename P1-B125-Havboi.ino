@@ -74,46 +74,42 @@ struct gpsData{
 // END OF GLOBAL VALS //
 
 // Pulls the GPS data and places it in gpsData struct variable
-void gpsPull(struct gpsData *input) {
-  int pos = 0;                    // Variabel til at holde positionen i arrayet place[]
-  String tempMsg = GPS.readStringUntil('\n'); // GPS output for $GPRMC linjen placeres i en tempMsg string
-  String place[12]; // String array til at holde hvert formateret output
-  int stringstart = 0;        // Variabel til at holde den læste position i GPS-output
+void gpsPull(struct gpsData *output) {
+  int pos = 0;                    // Variable to hold position
+  String tempMsg = GPS.readStringUntil('\n'); // Temporary output for $GPRMC
+  String place[12]; // String array to hold each entry
+  int stringstart = 0;        // Variable to hold start location of string
 
-  GPS.listen();
-
-  Serial.flush(); // De serielle forbindelser flushes for bedre aflæsning
-  GPS.flush();
-  while (GPS.available() > 0) // Imens GPS er tilgængelig
+  GPS.listen(); // Listen to GPS serial connection
+  GPS.flush(); // Serial connection is flushed
+  while (GPS.available() > 0) // While GPS is available
   {
-    GPS.read();
+    GPS.read(); // Read entire output
   }
   
-  if (GPS.find("$GPRMC,")) // Hvis Minimum Configuration linjen findes...
+  if (GPS.find("$GPRMC,")) // If Minimum Configuration is present...
   {
-    for (int i = 0; i < tempMsg.length(); i++)  // For loop tæller op til antallet af karakterer i tempMsg
+    for (int i = 0; i < tempMsg.length(); i++)  // For-loop to go through each character
     {
-      if (tempMsg.substring(i, i + 1) == ",") // Hvis karakteren i $GPRMC beskeden har et komma
+      if (tempMsg.substring(i, i + 1) == ",") // If the next character in $GPRMC is a comma
       {
-        place[pos] = tempMsg.substring(stringstart, i); // Nuværende karakter skrives ind i array
-        stringstart = i + 1; // Komma springes over, noteres ikke
-        pos++; // Skifter til næste position i arrayet 
+        place[pos] = tempMsg.substring(stringstart, i); // Substring is written to array
+        stringstart = i + 1; // Comma is skipped by increasing i by 1
+        pos++; // Switch to next position in array 
       }
-      if (i == tempMsg.length() - 1) // Hvis enden af tempMsg er nået
+      if (i == tempMsg.length() - 1) // If end of message is reached
       {
-        place[pos] = tempMsg.substring(stringstart, i);
+        place[pos] = tempMsg.substring(stringstart, i); // Substring is written to array
       }
     }
   }
 
-  // Kilde : http://www.davidjwatts.com/youtube/GPS-software-serial.ino
-
-  //input -> time = place[0]; // time
-  //input -> date = place[8]; // date
-  input -> latitude = place[2]; // latitude
-  input -> lathem = place[3]; // lat hem
-  input -> longitude = place[4]; // longitude
-  input -> longhem = place[5]; // long hem
+  // Source : http://www.davidjwatts.com/youtube/GPS-software-serial.ino
+  // Finally relevant strings are exported using pointers
+  output -> latitude = place[2];   // latitude
+  output -> lathem = place[3];     // lat hem
+  output -> longitude = place[4];  // longitude
+  output -> longhem = place[5];    // long hem
 }
 
 // Formats the GPS data for sending. From string to string
@@ -396,8 +392,9 @@ float jolty() {
   aY = (accelY / LSB) * 9.82;
   aZ = (accelZ / LSB) * 9.82;
 
-  float jol = sqrt(sq((oldX - aX)/0.025) + sq((oldY - aY)/0.025) + sq((oldZ - aZ)/0.025));
-  return jol;
+  // Length of Jolt vector is determined
+  float jolt = sqrt(sq((oldX - aX)/0.025) + sq((oldY - aY)/0.025) + sq((oldZ - aZ)/0.025));
+  return jolt;
 }
 
 // Checks wether the jolt value is out of range
@@ -486,13 +483,10 @@ void setup() {
 
 // Program loop (MAIN LOOP)
 void loop() {
-
-  //print_loop_time();
-  //gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
-  gpsTimer = millis() + 3600000 - 12000; // Timer sættes lig nuværende tidspunkt
+  gpsTimer = millis(); // Timer sættes lig nuværende tidspunkt
 
   collisionCheck(&data.alarm, jolty()); // Checker efter kollision
-  delay(25);
+  delay(25); // 25 milliseconds is required for the 40hz MPU
 
   if (gpsTimer > (gpsTimerPrev + 3600000*gps_interval - 10000)) { // 10 sekunder før GPS målinger, mosfet tændes
     digitalWrite(GPS_fet_pin,HIGH);
