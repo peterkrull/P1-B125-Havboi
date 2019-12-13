@@ -8,7 +8,7 @@
 
 //#define debugNoMessage  // Enables no sending mode    Undefine to disable
 #define serialPrinting  // Enables serial printing    Undefine to disable
-#define spoofVol 10.57  // Sets a custom voltage      Undefine to disable
+//#define spoofVol 10.57  // Sets a custom voltage      Undefine to disable
 
 // END OF DEBUG //
 
@@ -23,11 +23,11 @@
 #define good_val 16     // Value for no anomaly
 #define badd_val 17     // Value for detected collision
 
-#define aref 5.05       // Analog reference voltage
-#define jolt_max 5000   // Max allowed jolt for bouey
+#define aref 5.02       // Analog reference voltage
+#define jolt_max 2000   // Max allowed jolt for bouey
 #define gps_samp 60     // GPS samples for each recording
-#define attempts 5     // Allowed failed attempts at GPS lock
-#define gps_interval 1  // Hours between GPS phone-home
+#define attempts 60     // Allowed failed attempts at GPS lock
+#define gps_interval 24 // Hours between GPS phone-home
 
 #define R1 38.3         // R1 resistance in k Ohm 
 #define R2 10.0         // R2 resistance in k Ohm
@@ -173,9 +173,9 @@ float getVoltage(int samples = 100) {
 
 
 
-
+  voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / (R1 + RE)));
   #ifndef spoofVol
-  voltage = 1.0035 * ((voltage / samples) * ( aref / 1024 ) / ( RE / R1 + RE));
+ 
   #endif
   #ifdef spoofVol
     voltage = spoofVol;
@@ -249,15 +249,17 @@ bool sanityCheck(struct gpsData *input) {
     batteryChk = true;
   }
 
-  if (longitudeChk == true && latitudeChk == true & batteryChk == true){
+  if (longitudeChk == true && latitudeChk == true){// & batteryChk == true){
     #ifdef serialPrinting
     Serial.println("Sanity check passed!");
     #endif
     return true;
   } 
 
-  else if (longitudeChk != true || latitudeChk != true || batteryChk != true){
+  else if (longitudeChk != true || latitudeChk != true){// || batteryChk != true){
+    #ifdef serialPrinting
     Serial.println("Sanity check failed");
+    #endif
     /*#ifdef serialPrinting
     if (longitudeChk != true){
       Serial.println("Longitude is incorrect");
@@ -296,7 +298,9 @@ void SigFoxSetup() {
   // Check TD1208 communication
   if (!akeru.begin()) //If not working send KO
   {
+    #ifdef serialPrinting
     Serial.println("TD1208 KO");
+    #endif
     while (1);
   }
   //akeru.echoOn(); // uncomment this line to see AT commands
@@ -321,10 +325,8 @@ void SigFoxSend(uint64_t latt, uint64_t lonn, uint8_t volt, uint8_t alarm) {
 
   String msg = uint64ToString(latt) + uint64ToString(lonn) + uint64ToString(volt) + uint64ToString(alarm) + uint64ToString(trashbit);
   #ifdef serialPrinting
-  //akeru.listen();
   Serial.print("MSG:");
   Serial.println(msg);
-  
   Serial.println("Sending");
   #endif
   //akeru.listen();
@@ -417,8 +419,7 @@ void collisionCheck(uint8_t *alarm, float jolt) {
 }
 
 // Converts GPS data from DMS (degree,minute,second) to DDM (degree,decimal minute)
-String gpsConvert(String gpsData)
-{
+String gpsConvert(String gpsData) {
   String temp1; //Create temporary string
   String temp2; //Create temporary string
   
@@ -459,9 +460,9 @@ void print_loop_time(){
   
   loop_delta = millis() - loop_time;
   loop_time = millis();
-  //#ifdef serialPrinting
+  #ifdef serialPrinting
   Serial.print("Loop time : "); Serial.print(loop_delta); Serial.println(" ms");
-  //#endif
+  #endif
 }
 
 // Program setup
@@ -558,4 +559,10 @@ void loop() {
     aY = 0;
     aZ = 0;
   }
+}
+
+void loop2(){
+  #ifdef serialPrinting
+  Serial.print(""); Serial.println(getVoltage());
+  #endif
 }
